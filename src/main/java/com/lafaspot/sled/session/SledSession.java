@@ -3,22 +3,22 @@
  */
 package com.lafaspot.sled.session;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelOption;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
-
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nonnull;
 
 import com.lafaspot.logfast.logging.Logger;
 import com.lafaspot.sled.client.SledException;
+import com.lafaspot.sled.client.SledException.Type;
 import com.lafaspot.sled.client.SledFuture;
 import com.lafaspot.sled.client.SledMessageDecoder;
-import com.lafaspot.sled.client.SledException.Type;
+
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 
 /**
  * @author kraman
@@ -45,6 +45,9 @@ public class SledSession {
 	/** Netty channel. */
 	private Channel sessionChannel;
 
+	/** The future object. */
+	private SledFuture<String> getSledFuture;
+
 	/** State. */
 	public enum State {
 		/** not initialized. */
@@ -59,7 +62,7 @@ public class SledSession {
 
 	/**
 	 * Constructor.
-	 * 
+	 *
 	 * @param bootstrap
 	 *            netty bootstrap
 	 * @param server
@@ -79,7 +82,7 @@ public class SledSession {
 
 	/**
 	 * Connect to server.
-	 * 
+	 *
 	 * @param connectTimeout
 	 *            value
 	 * @param inactivityTimeout
@@ -89,44 +92,56 @@ public class SledSession {
 	 *             on failure
 	 */
 	public SledFuture<Boolean> connect(final int connectTimeout, final int inactivityTimeout) throws SledException {
-		logger.debug(" +++ connect to  " + server, null);
-		bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout);
+		// bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
+		// connectTimeout);
 		ChannelFuture future = bootstrap.connect(server, port);
 
-		// future.channel().pipeline().addLast("inactivityHandler", new
-		// PopInactivityHandler(this, inactivityTimeout, logger));
 		stateRef.compareAndSet(State.NULL, State.CONNECT_SENT);
-
 		sessionChannel = future.channel();
+		sessionChannel.config().setConnectTimeoutMillis(50);
 
 		final SledSession thisSession = this;
-		final SledFuture<Boolean> futureToReturn = new SledFuture<Boolean>(future);
+		final SledFuture<Boolean> connectFuture = new SledFuture<Boolean>(future);
 		future.addListener(new GenericFutureListener<Future<? super Void>>() {
 
 			@Override
 			public void operationComplete(final Future<? super Void> future) throws Exception {
 				if (future.isSuccess()) {
-
 					if (!stateRef.compareAndSet(State.CONNECT_SENT, State.CONNECTED)) {
+						connectFuture.done(new SledException(SledException.Type.INTERNAL_FAILURE));
 						logger.error("Connect success in invalid state " + stateRef.get().name(), null);
 						return;
 					}
 
+					sessionChannel.pipeline()
+							.addFirst(new SledInactivityHandler(thisSession, inactivityTimeout, logger));
 					sessionChannel.pipeline().addLast(new SledMessageDecoder(thisSession, logger));
 
-					futureToReturn.done(Boolean.TRUE);
+					// register for close event
+					sessionChannel.closeFuture().addListener(new ChannelFutureListener() {
+						@Override
+						public void operationComplete(ChannelFuture future) throws Exception {
+							if (null != getSledFuture && !getSledFuture.isDone()) {
+								getSledFuture.done(new SledException(Type.INTERNAL_FAILURE));
+							} else {
+								if (!connectFuture.isDone()) {
+									connectFuture.done(new SledException(Type.INTERNAL_FAILURE));
+								}
+							}
+						}
+					});
+					connectFuture.done(Boolean.TRUE);
+				} else {
+					connectFuture.done(new SledException(SledException.Type.INTERNAL_FAILURE));
 				}
 			}
 		});
-		return futureToReturn;
+		return connectFuture;
 	}
-
-	/** The future object. */
-	private SledFuture<String> currentFuture;
 
 	/**
 	 * Fetch SLEDID from server on a connected session.
-	 * 
+	 *
 	 * @return SledFuture the future object
 	 * @throws SledException
 	 *             on failure
@@ -138,16 +153,18 @@ public class SledSession {
 		}
 
 		Future f = sessionChannel.writeAndFlush("\n");
-		currentFuture = new SledFuture<String>(f);
-		return currentFuture;
+		getSledFuture = new SledFuture<String>(f);
+		return getSledFuture;
 	}
 
 	/**
 	 * Received a response on the channe.
-	 * @param msg received from server
+	 *
+	 * @param msg
+	 *            received from server
 	 */
 	public void onResponse(@Nonnull final String msg) {
-		currentFuture.done(msg);
+		getSledFuture.done(msg);
 		this.sessionChannel.close();
 	}
 
@@ -155,6 +172,7 @@ public class SledSession {
 	 * Timeout on channel, inactivity.
 	 */
 	public void onTimeout() {
+		getSledFuture.done(new SledException(SledException.Type.TIMEDOUT));
 		this.sessionChannel.close();
 	}
 

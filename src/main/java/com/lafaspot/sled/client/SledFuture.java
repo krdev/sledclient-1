@@ -14,8 +14,9 @@ import javax.annotation.Nonnull;
 
 /**
  * Future object for async operations.
- * 
- *@param <V> response object
+ *
+ * @param <V>
+ *            response object
  *
  * @author kraman
  *
@@ -89,7 +90,7 @@ public class SledFuture<V> implements Future<V> {
 	 * @param cause
 	 *            the exception that caused execution to fail
 	 */
-	protected void done(final Exception cause) {
+	public void done(final Exception cause) {
 		synchronized (lock) {
 			if (!isDone.get()) {
 				causeRef.set(cause);

@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.github.lafa.sledclient</groupId>
     <artifactId>sledclient</artifactId>
-    <version>0.0.1</version>
+    <version>0.0.2</version>
     <name>sledclient</name>
     <packaging>jar</packaging>
     <url>https://github.com/lafaspot/seldclient</url>
@@ -95,11 +95,6 @@
             <groupId>io.netty</groupId>
             <artifactId>netty-handler</artifactId>
             <version>4.1.4.Final</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-            <version>4.5.2</version>
         </dependency>
 
         <dependency>

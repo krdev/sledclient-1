@@ -1,15 +1,15 @@
 package com.lafaspot.sled.session;
 
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.timeout.IdleState;
-import io.netty.handler.timeout.IdleStateEvent;
-import io.netty.handler.timeout.IdleStateHandler;
-
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 
 import com.lafaspot.logfast.logging.Logger;
+
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.handler.timeout.IdleStateHandler;
 
 /**
  * Handles channel inactivity.
@@ -37,7 +37,7 @@ public class SledInactivityHandler extends IdleStateHandler {
 	 */
 	public SledInactivityHandler(@Nonnull final SledSession session, final long inactivityTimeout,
 			@Nonnull final Logger logger) {
-		super(0, 0, inactivityTimeout, TimeUnit.MILLISECONDS);
+		super(inactivityTimeout, 0, inactivityTimeout, TimeUnit.MILLISECONDS);
 		this.session = session;
 		this.logger = logger;
 	}
